@@ -6,6 +6,8 @@ import FeedbackStageForm from './modules/Feedback/FeedbackStageForm';
 import CompetencyRatingsForm from './modules/Competency/CompetencyRatingsForm';
 import FinalRecommendationForm from './modules/Recommendation/FinalRecommendationForm';
 import Dashboard from './modules/Dashboard/Dashboard';
+import MenuBar from './components/MenuBar';
+import AdminEmailTemplates from './pages/AdminEmailTemplates';
 
 const App: React.FC = () => {
   return (
