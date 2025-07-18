@@ -5,20 +5,26 @@ CREATE DATABASE IF NOT EXISTS ats_db;
 USE ats_db;
 
 -- Users table for authentication
+
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
-  name VARCHAR(255)
+  name VARCHAR(255),
+  role VARCHAR(50) DEFAULT 'Panelist',
+  enabled BOOLEAN DEFAULT TRUE
 );
 
 -- Candidates table
+
 CREATE TABLE IF NOT EXISTS candidates (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   phone VARCHAR(20),
   resume_url VARCHAR(255),
+  cv_file VARCHAR(255),
+  enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
