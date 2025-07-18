@@ -1,6 +1,11 @@
 // CandidateProfileManager.tsx
 // Candidate Profile Manager: Manual entry, CSV import, resume link, tags, timeline view
 import React, { useState } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import RecentActivity from '../../components/RecentActivity';
 import { CandidateProfile } from '../../types/candidate';
 import axios from 'axios';
 
@@ -20,6 +25,8 @@ const existingTags = ['Java', 'React', 'Python', 'Manager', 'Remote', 'Intern'];
 const CandidateProfileManager: React.FC = () => {
   const [profile, setProfile] = useState<CandidateProfile>(initialProfile);
   const [csvData, setCsvData] = useState<string>('');
+  const [interviewDate, setInterviewDate] = useState<Date | null>(null);
+  const [auditContent, setAuditContent] = useState('');
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [tooltip, setTooltip] = useState<string>('');
   const [newTag, setNewTag] = useState('');
@@ -116,6 +123,11 @@ const CandidateProfileManager: React.FC = () => {
         </div>
         <input name="phone" placeholder="Phone" value={profile.phone} onChange={handleChange} />
         <input name="resumeUrl" placeholder="Resume Link" value={profile.resumeUrl} onChange={handleResumeUrlChange} />
+        {/* Modern Date Picker for Interview Date */}
+        <div style={{ margin: '8px 0' }}>
+          <label>Interview Date:</label>
+          <DatePicker selected={interviewDate} onChange={(date: Date | null) => setInterviewDate(date)} dateFormat="yyyy-MM-dd" placeholderText="Select interview date" />
+        </div>
         <input type="file" accept=".csv" onChange={handleCsvImport} />
         {/* Tags input: select existing or add new */}
         <div style={{ margin: '8px 0' }}>
@@ -164,13 +176,12 @@ const CandidateProfileManager: React.FC = () => {
           <li key={idx}>{item.stage} - {item.date} - {item.status}</li>
         ))}
       </ul>
-      {/* Audit log view */}
-      <h3>Audit Logs</h3>
-      <ul>
-        {(profile.auditLogs || []).map((log, idx) => (
-          <li key={idx}>{log.timestamp}: {log.user} - {log.action}</li>
-        ))}
-      </ul>
+      {/* WYSIWYG Rich Content Auditor */}
+      <h3>Audit Log (Rich Content)</h3>
+      <ReactQuill value={auditContent} onChange={setAuditContent} placeholder="Enter audit notes..." />
+      <button type="button" style={{ marginTop: 8 }} onClick={() => setAuditContent('')}>Clear Audit Content</button>
+      {/* Recent Activity */}
+      <RecentActivity activities={(profile.auditLogs || []).map(log => ({ timestamp: log.timestamp, user: log.user, action: log.action }))} />
     </div>
   );
 };

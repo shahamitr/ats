@@ -1,6 +1,25 @@
 
 # ATS Project: Local Development Setup
 
+## Features
+
+- **Authentication & Role-based Access**: JWT login, Admin, HR Manager, Recruiter, Panelist roles
+- **Candidate Management**: Add, update, enable/disable, import/export (Excel), CV upload, tags (select/add/remove)
+- **Interview History**: Track multiple interviews per candidate, view full history
+- **Competency Ratings**: Panelists rate candidates on multiple competencies
+- **Feedback & Recommendations**: Submit feedback, final recommendations, AI-generated feedback summary
+- **Dashboards**: Role-based dashboards for Admin, HR, Recruiter, Panelist
+- **Notifications**: In-app notifications for pending feedback, reminders, AI summaries
+- **Reporting & Export**:
+  - Candidate journey export (Excel/PDF)
+  - Executive recruitment report (monthly/quarterly/yearly, Excel/PDF)
+- **Audit Logging**: Track all key actions for compliance
+- **API Caching**: Fast repeated queries
+- **Security**: Password hashing, JWT, role-based endpoint protection
+- **Admin Tools**: Enable/disable users/candidates, import/export, reporting
+- **UI/UX**: Modern React UI, Tailwind CSS, Snackbar notifications, filters (date, stage, location, tag)
+
+
 ## Prerequisites
 - Node.js (v18+ recommended)
 - npm

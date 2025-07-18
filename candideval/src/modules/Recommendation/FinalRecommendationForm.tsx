@@ -1,6 +1,8 @@
 // FinalRecommendationForm.tsx
 // Final Recommendation Engine: cumulative score, status selector, suggestions, audit logs, backend
 import React, { useState } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import axios from 'axios';
 
 interface AuditLog {
@@ -75,12 +77,9 @@ const FinalRecommendationForm: React.FC = () => {
         </label>
         <br />
         <label>Suggestions:
-          <textarea
-            rows={3}
-            value={rec.suggestions}
-            onChange={e => handleChange('suggestions', e.target.value)}
-            placeholder="Optional suggestions box"
-          />
+          <div style={{ margin: '8px 0' }}>
+            <ReactQuill value={rec.suggestions} onChange={(val: string) => handleChange('suggestions', val)} placeholder="Optional suggestions box" />
+          </div>
         </label>
         <br />
         <button type="submit">Save Recommendation</button>

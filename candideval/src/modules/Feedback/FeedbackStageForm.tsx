@@ -1,6 +1,8 @@
 // FeedbackStageForm.tsx
 // Stage-Based Feedback Collection: panel assignment, feedback, scores, outcome, completion tracker, edit restrictions
 import React, { useState } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { useAuth } from '../Auth/AuthContext';
 import axios from 'axios';
 // Dummy data for stages and panelMembers (replace with actual imports or props as needed)
@@ -93,13 +95,9 @@ const FeedbackStageForm: React.FC = () => {
             </label>
             <br />
             <label>Feedback:
-              <textarea
-                rows={3}
-                value={fb.feedback}
-                onChange={canEdit ? e => handleChange(idx, 'feedback', e.target.value) : undefined}
-                placeholder="Enter feedback (2-7 lines)"
-                disabled={!canEdit}
-              />
+              <div style={{ margin: '8px 0' }}>
+                <ReactQuill value={fb.feedback} onChange={canEdit ? (val: string) => handleChange(idx, 'feedback', val) : undefined} readOnly={!canEdit} placeholder="Enter feedback (2-7 lines)" />
+              </div>
             </label>
             <br />
             <label>Score:
