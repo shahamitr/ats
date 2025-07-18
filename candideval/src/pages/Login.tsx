@@ -6,18 +6,36 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'password' | 'otp'>('password');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('/api/auth/login', { email, password });
-      login(res.data.user); // Save user in context
-      // Optionally save token
+      let res;
+      if (mode === 'password') {
+        res = await axios.post('/api/auth/login', { email, password });
+      } else {
+        res = await axios.post('/api/auth/login', { email, otp });
+      }
+      login(res.data.user);
       localStorage.setItem('token', res.data.token);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err.response?.data?.error || 'Login failed');
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setError('');
+    try {
+      await axios.post('/api/auth/send-otp', { email });
+      setOtpSent(true);
+      setMode('otp');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to send OTP');
     }
   };
 
@@ -34,15 +52,46 @@ const Login: React.FC = () => {
           className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
           required
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="w-full mb-6 p-2 border rounded dark:bg-gray-700 dark:text-white"
-          required
-        />
-        <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Login</button>
+        {mode === 'password' ? (
+          <>
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
+              required
+            />
+            <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 mb-2">Login with Password</button>
+            <button
+              type="button"
+              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+              onClick={handleSendOtp}
+              disabled={!email}
+            >
+              {otpSent ? 'Resend OTP' : 'Login with OTP'}
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              placeholder="Enter OTP"
+              value={otp}
+              onChange={e => setOtp(e.target.value)}
+              className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
+              required
+            />
+            <button type="submit" className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 mb-2">Login with OTP</button>
+            <button
+              type="button"
+              className="w-full bg-gray-400 text-white py-2 rounded hover:bg-gray-500"
+              onClick={() => setMode('password')}
+            >
+              Back to Password Login
+            </button>
+          </>
+        )}
       </form>
     </div>
   );

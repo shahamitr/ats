@@ -11,12 +11,14 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
+        <MenuBar />
         <Routes>
           <Route path="/candidate" element={<CandidateProfileManager />} />
           <Route path="/feedback" element={<FeedbackStageForm />} />
           <Route path="/competency" element={<CompetencyRatingsForm />} />
           <Route path="/recommendation" element={<FinalRecommendationForm />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/admin/email-templates" element={<AdminEmailTemplates />} />
           {/* Add more routes for other modules here */}
         </Routes>
       </Router>

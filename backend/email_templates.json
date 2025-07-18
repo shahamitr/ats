@@ -1,0 +1,14 @@
+{
+  "otp": {
+    "subject": "Your ATS Login OTP",
+    "body": "Hello {{name}},\nYour OTP is: {{otp}} (valid for 5 minutes)."
+  },
+  "feedback_request": {
+    "subject": "Feedback Request for Candidate {{candidate_name}}",
+    "body": "Dear {{role}},\nPlease provide feedback for candidate {{candidate_name}}."
+  },
+  "reminder": {
+    "subject": "Reminder: Pending Action",
+    "body": "Hello {{name}},\nYou have pending actions in the ATS system."
+  }
+}

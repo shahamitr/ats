@@ -1,3 +1,99 @@
+// Email Templates CRUD (admin only)
+import fs from 'fs';
+const EMAIL_TEMPLATES_PATH = './email_templates.json';
+
+// Get all templates
+app.get('/api/email-templates', authenticateToken, authorizeRoles('Admin'), (req, res) => {
+  try {
+    const templates = JSON.parse(fs.readFileSync(EMAIL_TEMPLATES_PATH, 'utf8'));
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load templates' });
+  }
+});
+
+// Get single template
+app.get('/api/email-templates/:key', authenticateToken, authorizeRoles('Admin'), (req, res) => {
+  try {
+    const templates = JSON.parse(fs.readFileSync(EMAIL_TEMPLATES_PATH, 'utf8'));
+    const tpl = templates[req.params.key];
+    if (!tpl) return res.status(404).json({ error: 'Template not found' });
+    res.json(tpl);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load template' });
+  }
+});
+
+// Create/update template
+app.post('/api/email-templates/:key', authenticateToken, authorizeRoles('Admin'), (req, res) => {
+  try {
+    const templates = JSON.parse(fs.readFileSync(EMAIL_TEMPLATES_PATH, 'utf8'));
+    templates[req.params.key] = req.body;
+    fs.writeFileSync(EMAIL_TEMPLATES_PATH, JSON.stringify(templates, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save template' });
+  }
+});
+
+// Delete template
+app.delete('/api/email-templates/:key', authenticateToken, authorizeRoles('Admin'), (req, res) => {
+  try {
+    const templates = JSON.parse(fs.readFileSync(EMAIL_TEMPLATES_PATH, 'utf8'));
+    if (!templates[req.params.key]) return res.status(404).json({ error: 'Template not found' });
+    delete templates[req.params.key];
+    fs.writeFileSync(EMAIL_TEMPLATES_PATH, JSON.stringify(templates, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+// Email OTP store (in-memory for demo)
+const otpStore = {};
+
+// Send OTP to email
+app.post('/api/auth/send-otp', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  // Check user exists
+  const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+  if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+  // Generate OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore[email] = { otp, expires: Date.now() + 5 * 60 * 1000 };
+  // Send email
+  await transporter.sendMail({
+    to: email,
+    subject: 'Your ATS Login OTP',
+    text: `Your OTP is: ${otp} (valid for 5 minutes)`
+  });
+  res.json({ success: true });
+});
+
+// Login with OTP or password
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password, otp } = req.body;
+  const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+  if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+  const user = rows[0];
+  if (otp) {
+    // OTP login
+    const entry = otpStore[email];
+    if (!entry || entry.otp !== otp || entry.expires < Date.now()) {
+      return res.status(401).json({ error: 'Invalid or expired OTP' });
+    }
+    delete otpStore[email];
+  } else {
+    // Password login
+    const bcrypt = require('bcryptjs');
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Invalid password' });
+  }
+  // Issue JWT
+  const jwt = require('jsonwebtoken');
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+  res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+});
 // Candidate Interview History CRUD
 app.post('/api/candidates/:id/interviews', authenticateToken, authorizeRoles('Admin', 'HR Manager', 'Recruiter'), async (req, res) => {
   const candidateId = req.params.id;
@@ -92,7 +188,7 @@ const openai = new OpenAIApi(new Configuration({ apiKey: process.env.OPENAI_API_
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
-  secure: false,
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
