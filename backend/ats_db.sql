@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS candidates (
   phone VARCHAR(20),
   resume_url VARCHAR(255),
   cv_file VARCHAR(255),
+  tags VARCHAR(255),
   enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -55,7 +56,6 @@ CREATE TABLE IF NOT EXISTS feedback (
   FOREIGN KEY (panel_member) REFERENCES users(id)
 );
 
--- Recommendations table
 CREATE TABLE IF NOT EXISTS recommendations (
   id INT AUTO_INCREMENT PRIMARY KEY,
   candidate_id INT,
@@ -65,4 +65,17 @@ CREATE TABLE IF NOT EXISTS recommendations (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (candidate_id) REFERENCES candidates(id),
   FOREIGN KEY (recommended_by) REFERENCES users(id)
+);
+
+-- Candidate Interview History table
+CREATE TABLE IF NOT EXISTS candidate_interview_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  candidate_id INT,
+  interview_date DATE,
+  interview_type VARCHAR(50), -- e.g. Screening, Technical, HR, Executive
+  panel_members VARCHAR(255), -- comma-separated user IDs
+  feedback TEXT,
+  result VARCHAR(50), -- e.g. Selected, Rejected, On Hold
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id)
 );

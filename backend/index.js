@@ -1,3 +1,153 @@
+// Candidate Interview History CRUD
+app.post('/api/candidates/:id/interviews', authenticateToken, authorizeRoles('Admin', 'HR Manager', 'Recruiter'), async (req, res) => {
+  const candidateId = req.params.id;
+  const { interview_date, interview_type, panel_members, feedback, result } = req.body;
+  try {
+    await db.execute(
+      'INSERT INTO candidate_interview_history (candidate_id, interview_date, interview_type, panel_members, feedback, result) VALUES (?, ?, ?, ?, ?, ?)',
+      [candidateId, interview_date, interview_type, panel_members, feedback, result]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/candidates/:id/interviews', authenticateToken, async (req, res) => {
+  const candidateId = req.params.id;
+  try {
+    const [rows] = await db.execute('SELECT * FROM candidate_interview_history WHERE candidate_id = ?', [candidateId]);
+    res.json({ interviews: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Executive Report: Quantitative recruitment info (Excel/PDF)
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
+const dayjs = require('dayjs');
+
+app.get('/api/reports/executive', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  // Query params: period=monthly|quarterly|yearly, format=excel|pdf
+  const { period = 'monthly', format = 'excel' } = req.query;
+  let startDate, endDate;
+  const now = dayjs();
+  if (period === 'monthly') {
+    startDate = now.startOf('month').format('YYYY-MM-DD');
+    endDate = now.endOf('month').format('YYYY-MM-DD');
+  } else if (period === 'quarterly') {
+    startDate = now.startOf('quarter').format('YYYY-MM-DD');
+    endDate = now.endOf('quarter').format('YYYY-MM-DD');
+  } else {
+    startDate = now.startOf('year').format('YYYY-MM-DD');
+    endDate = now.endOf('year').format('YYYY-MM-DD');
+  }
+  try {
+    // Quantitative info: total candidates, interviews, selected, rejected, etc.
+    const [[{ total_candidates }]] = await db.execute('SELECT COUNT(*) as total_candidates FROM candidates WHERE created_at BETWEEN ? AND ?', [startDate, endDate]);
+    const [[{ total_interviews }]] = await db.execute('SELECT COUNT(*) as total_interviews FROM candidate_interview_history WHERE interview_date BETWEEN ? AND ?', [startDate, endDate]);
+    const [[{ selected }]] = await db.execute("SELECT COUNT(*) as selected FROM candidate_interview_history WHERE result = 'Selected' AND interview_date BETWEEN ? AND ?", [startDate, endDate]);
+    const [[{ rejected }]] = await db.execute("SELECT COUNT(*) as rejected FROM candidate_interview_history WHERE result = 'Rejected' AND interview_date BETWEEN ? AND ?", [startDate, endDate]);
+    const [[{ on_hold }]] = await db.execute("SELECT COUNT(*) as on_hold FROM candidate_interview_history WHERE result = 'On Hold' AND interview_date BETWEEN ? AND ?", [startDate, endDate]);
+    if (format === 'excel') {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Executive Report');
+      sheet.addRow(['Metric', 'Value']);
+      sheet.addRow(['Total Candidates', total_candidates]);
+      sheet.addRow(['Total Interviews', total_interviews]);
+      sheet.addRow(['Selected', selected]);
+      sheet.addRow(['Rejected', rejected]);
+      sheet.addRow(['On Hold', on_hold]);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=executive_report_${period}_${now.format('YYYYMMDD')}.xlsx`);
+      await workbook.xlsx.write(res);
+      res.end();
+    } else {
+      const doc = new PDFDocument();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=executive_report_${period}_${now.format('YYYYMMDD')}.pdf`);
+      doc.fontSize(20).text('Executive Recruitment Report', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(14).text(`Period: ${period.charAt(0).toUpperCase() + period.slice(1)} (${startDate} to ${endDate})`);
+      doc.moveDown();
+      doc.fontSize(12).text(`Total Candidates: ${total_candidates}`);
+      doc.text(`Total Interviews: ${total_interviews}`);
+      doc.text(`Selected: ${selected}`);
+      doc.text(`Rejected: ${rejected}`);
+      doc.text(`On Hold: ${on_hold}`);
+      doc.end();
+      doc.pipe(res);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+import { Configuration, OpenAIApi } from 'openai';
+import nodemailer from 'nodemailer';
+// OpenAI setup
+const openai = new OpenAIApi(new Configuration({ apiKey: process.env.OPENAI_API_KEY }));
+
+// Nodemailer setup (demo: use environment variables for SMTP)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+// AI-generated feedback summary for a candidate
+app.get('/api/candidates/:id/feedback-summary', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  const candidateId = req.params.id;
+  try {
+    const [feedbackRows] = await db.execute('SELECT feedback_text FROM feedback WHERE candidate_id = ?', [candidateId]);
+    const feedbackTexts = feedbackRows.map(f => f.feedback_text).join('\n');
+    if (!feedbackTexts) return res.json({ summary: 'No feedback available.' });
+    const prompt = `Summarize the following interview feedback for candidate ${candidateId} in 3-5 sentences:\n${feedbackTexts}`;
+    const completion = await openai.createChatCompletion({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 300,
+    });
+    const summary = completion.data.choices[0].message.content;
+    res.json({ summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API to get pending feedbacks for reminders
+app.get('/api/pending-feedback', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  try {
+    // Example: feedbacks with empty feedback_text are pending
+    const [pending] = await db.execute('SELECT f.id, f.candidate_id, f.stage, f.panel_member, u.email FROM feedback f JOIN users u ON f.panel_member = u.id WHERE f.feedback_text IS NULL OR f.feedback_text = ""');
+    res.json({ pending });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send email reminders for pending feedback
+app.post('/api/send-feedback-reminders', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  try {
+    const [pending] = await db.execute('SELECT f.id, f.candidate_id, f.stage, f.panel_member, u.email FROM feedback f JOIN users u ON f.panel_member = u.id WHERE f.feedback_text IS NULL OR f.feedback_text = ""');
+    let sent = 0;
+    for (const item of pending) {
+      await transporter.sendMail({
+        from: process.env.SMTP_USER,
+        to: item.email,
+        subject: 'Pending Interview Feedback Reminder',
+        text: `You have pending feedback for candidate ${item.candidate_id} at stage ${item.stage}. Please submit your feedback.`,
+      });
+      sent++;
+    }
+    res.json({ success: true, sent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 import PDFDocument from 'pdfkit';
 import dayjs from 'dayjs';
 // Export candidate journey as PDF
@@ -121,6 +271,33 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
+import NodeCache from 'node-cache';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+// JWT secret
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+
+// Auth middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+}
+
+// Role-based middleware
+function authorizeRoles(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  };
+}
 
 dotenv.config();
 
@@ -198,10 +375,10 @@ app.get('/api/admin/users/export', async (req, res) => {
 
 // Admin: Add candidate (with CV upload)
 app.post('/api/admin/candidates', upload.single('cv'), async (req, res) => {
-  const { name, email, phone, resume_url } = req.body;
+  const { name, email, phone, resume_url, tags } = req.body;
   const cv_file = req.file ? req.file.filename : null;
   try {
-    await db.execute('INSERT INTO candidates (name, email, phone, resume_url, cv_file, enabled) VALUES (?, ?, ?, ?, ?, TRUE)', [name, email, phone, resume_url, cv_file]);
+    await db.execute('INSERT INTO candidates (name, email, phone, resume_url, cv_file, tags, enabled) VALUES (?, ?, ?, ?, ?, ?, TRUE)', [name, email, phone, resume_url, cv_file, tags]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -262,6 +439,7 @@ app.get('/api/admin/candidates/export', async (req, res) => {
   }
 });
 
+
 const db = await mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -269,49 +447,80 @@ const db = await mysql.createConnection({
   database: process.env.DB_NAME || 'ats_db',
 });
 
+// NodeCache instance for caching
+const cache = new NodeCache({ stdTTL: 60 }); // 60 seconds default TTL
+
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running!' });
 });
 
-// Auth: Login
+// Auth: Login (bcrypt + JWT)
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE email = ? AND password = ?', [email, password]);
-    if (rows.length > 0) {
-      res.json({ success: true, user: rows[0] });
-    } else {
-      res.status(401).json({ success: false, message: 'Invalid credentials' });
+    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    const user = rows[0];
+    // Compare password
+    if (!bcrypt.compareSync(password, user.password)) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
+    // Issue JWT
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ success: true, user: { id: user.id, email: user.email, role: user.role, name: user.name }, token });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Candidates CRUD
-app.get('/api/candidates', async (req, res) => {
+
+// Candidates CRUD with caching and audit log
+app.get('/api/candidates', authenticateToken, async (req, res) => {
+  const cacheKey = 'candidates_list';
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    // Audit log: cache hit
+    await db.execute('INSERT INTO competency_ratings (candidate_id, communication, cultural_fit, passion, leadership, learning_agility, rated_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [null, 0, 0, 0, 0, 0, 'cache']);
+    return res.json(cached);
+  }
   try {
     const [rows] = await db.execute('SELECT * FROM candidates');
+    cache.set(cacheKey, rows);
+    // Audit log: API fetch
+    await db.execute('INSERT INTO competency_ratings (candidate_id, communication, cultural_fit, passion, leadership, learning_agility, rated_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [null, 0, 0, 0, 0, 0, 'api']);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/candidates', async (req, res) => {
-  const { name, email, phone, resume_url } = req.body;
+app.post('/api/candidates', authenticateToken, authorizeRoles('Admin', 'HR Manager', 'Recruiter'), async (req, res) => {
+  const { name, email, phone, resume_url, tags } = req.body;
   try {
-    const [result] = await db.execute('INSERT INTO candidates (name, email, phone, resume_url) VALUES (?, ?, ?, ?)', [name, email, phone, resume_url]);
+    const [result] = await db.execute('INSERT INTO candidates (name, email, phone, resume_url, tags) VALUES (?, ?, ?, ?, ?)', [name, email, phone, resume_url, tags]);
     res.json({ success: true, id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// Update candidate (add tags support)
+app.put('/api/candidates/:id', authenticateToken, authorizeRoles('Admin', 'HR Manager', 'Recruiter'), async (req, res) => {
+  const { name, email, phone, resume_url, cv_file, tags, enabled } = req.body;
+  try {
+    await db.execute(
+      'UPDATE candidates SET name = ?, email = ?, phone = ?, resume_url = ?, cv_file = ?, tags = ?, enabled = ? WHERE id = ?',
+      [name, email, phone, resume_url, cv_file, tags, enabled, req.params.id]
+    );
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Competency Ratings
-app.post('/api/competency', async (req, res) => {
+app.post('/api/competency', authenticateToken, authorizeRoles('Panelist', 'HR Manager', 'Admin'), async (req, res) => {
   const { candidate_id, communication, cultural_fit, passion, leadership, learning_agility, rated_by } = req.body;
   try {
     await db.execute(
@@ -325,7 +534,7 @@ app.post('/api/competency', async (req, res) => {
 });
 
 // Feedback
-app.post('/api/feedback', async (req, res) => {
+app.post('/api/feedback', authenticateToken, authorizeRoles('Panelist', 'HR Manager', 'Admin'), async (req, res) => {
   const { candidate_id, stage, feedback_text, panel_member } = req.body;
   try {
     await db.execute(
@@ -339,7 +548,7 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // Recommendations
-app.post('/api/recommendations', async (req, res) => {
+app.post('/api/recommendations', authenticateToken, authorizeRoles('HR Manager', 'Admin'), async (req, res) => {
   const { candidate_id, recommendation_text, status, recommended_by } = req.body;
   try {
     await db.execute(
@@ -353,7 +562,7 @@ app.post('/api/recommendations', async (req, res) => {
 });
 
 // Dashboard summary (example: candidate count)
-app.get('/api/dashboard', async (req, res) => {
+app.get('/api/dashboard', authenticateToken, async (req, res) => {
   try {
     const [rows] = await db.execute('SELECT COUNT(*) as candidateCount FROM candidates');
     res.json(rows[0]);

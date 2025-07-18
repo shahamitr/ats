@@ -16,11 +16,13 @@ const initialProfile: CandidateProfile = {
   auditLogs: [], // new field for audit logs
 };
 
+const existingTags = ['Java', 'React', 'Python', 'Manager', 'Remote', 'Intern'];
 const CandidateProfileManager: React.FC = () => {
   const [profile, setProfile] = useState<CandidateProfile>(initialProfile);
   const [csvData, setCsvData] = useState<string>('');
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [tooltip, setTooltip] = useState<string>('');
+  const [newTag, setNewTag] = useState('');
 
   // Handlers for form fields
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,7 +39,12 @@ const CandidateProfileManager: React.FC = () => {
   };
 
   const handleTagAdd = (tag: string) => {
-    setProfile({ ...profile, tags: [...profile.tags, tag] });
+    if (!profile.tags.includes(tag)) {
+      setProfile({ ...profile, tags: [...profile.tags, tag] });
+    }
+  };
+  const handleTagRemove = (tag: string) => {
+    setProfile({ ...profile, tags: profile.tags.filter(t => t !== tag) });
   };
 
   const handleResumeUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,8 +78,9 @@ const CandidateProfileManager: React.FC = () => {
   // Backend connection (demo: save profile)
   const saveProfile = async () => {
     try {
-      // Replace with your backend API endpoint
-      await axios.post('/api/candidates', profile);
+      // Send tags as comma-separated string
+      const payload = { ...profile, tags: profile.tags.join(',') };
+      await axios.post('/api/candidates', payload);
       addAuditLog('Profile saved', 'admin');
       alert('Profile saved successfully!');
     } catch (err) {
@@ -109,22 +117,41 @@ const CandidateProfileManager: React.FC = () => {
         <input name="phone" placeholder="Phone" value={profile.phone} onChange={handleChange} />
         <input name="resumeUrl" placeholder="Resume Link" value={profile.resumeUrl} onChange={handleResumeUrlChange} />
         <input type="file" accept=".csv" onChange={handleCsvImport} />
-        {/* Tags input (simple demo) */}
-        <input
-          placeholder="Add tag"
-          onFocus={() => setTooltip('Type and press Enter to add tag')}
-          onBlur={() => setTooltip('')}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && e.currentTarget.value) {
-              handleTagAdd(e.currentTarget.value);
-              e.currentTarget.value = '';
-              e.preventDefault();
-            }
-          }}
-        />
+        {/* Tags input: select existing or add new */}
+        <div style={{ margin: '8px 0' }}>
+          <label>Select existing tags:</label>
+          <div>
+            {existingTags.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                style={{ margin: '2px', background: profile.tags.includes(tag) ? '#4ade80' : '#eee', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer' }}
+                onClick={() => handleTagAdd(tag)}
+              >{tag}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ margin: '8px 0' }}>
+          <label>Add new tag:</label>
+          <input
+            value={newTag}
+            onChange={e => setNewTag(e.target.value)}
+            placeholder="Type tag and press Enter"
+            onKeyDown={e => {
+              if (e.key === 'Enter' && newTag.trim()) {
+                handleTagAdd(newTag.trim());
+                setNewTag('');
+                e.preventDefault();
+              }
+            }}
+          />
+        </div>
         <div>
           {profile.tags.map(tag => (
-            <span key={tag} style={{ marginRight: 8 }}>{tag}</span>
+            <span key={tag} style={{ marginRight: 8, background: '#fbbf24', borderRadius: '4px', padding: '2px 8px' }}>
+              {tag}
+              <button type="button" style={{ marginLeft: 4, background: 'transparent', border: 'none', cursor: 'pointer' }} onClick={() => handleTagRemove(tag)}>x</button>
+            </span>
           ))}
         </div>
         <button type="submit">Save Profile</button>
