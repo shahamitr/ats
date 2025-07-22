@@ -79,3 +79,34 @@ CREATE TABLE IF NOT EXISTS candidate_interview_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (candidate_id) REFERENCES candidates(id)
 );
+
+-- Report templates and saved reports
+CREATE TABLE IF NOT EXISTS report_templates (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255),
+  template_config JSON,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Scheduled reports
+CREATE TABLE IF NOT EXISTS scheduled_reports (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  report_type VARCHAR(100),
+  schedule_config JSON,
+  recipients JSON,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Report audit log
+CREATE TABLE IF NOT EXISTS report_audit_log (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  report_type VARCHAR(100),
+  generated_by INT,
+  filters_applied JSON,
+  generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (generated_by) REFERENCES users(id)
+);

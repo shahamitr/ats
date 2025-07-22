@@ -54,45 +54,57 @@ const otpStore = {};
 // Send OTP to email
 app.post('/api/auth/send-otp', async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email required' });
-  // Check user exists
-  const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-  if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
-  // Generate OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore[email] = { otp, expires: Date.now() + 5 * 60 * 1000 };
-  // Send email
-  await transporter.sendMail({
-    to: email,
-    subject: 'Your ATS Login OTP',
-    text: `Your OTP is: ${otp} (valid for 5 minutes)`
-  });
-  res.json({ success: true });
+  try {
+    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
+    // Check user exists
+    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore[email] = { otp, expires: Date.now() + 5 * 60 * 1000 };
+    // Send email
+    await transporter.sendMail({
+      to: email,
+      subject: 'Your ATS Login OTP',
+      text: `Your OTP is: ${otp} (valid for 5 minutes)`
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Login with OTP or password
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, otp } = req.body;
-  const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-  if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
-  const user = rows[0];
-  if (otp) {
-    // OTP login
-    const entry = otpStore[email];
-    if (!entry || entry.otp !== otp || entry.expires < Date.now()) {
-      return res.status(401).json({ error: 'Invalid or expired OTP' });
+  try {
+    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    delete otpStore[email];
-  } else {
-    // Password login
-    const bcrypt = require('bcryptjs');
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ error: 'Invalid password' });
+    const user = rows[0];
+
+    if (otp) {
+      const entry = otpStore[email];
+      if (!entry || entry.otp !== otp || entry.expires < Date.now()) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
+      }
+      delete otpStore[email]; // Consume OTP
+    } else if (password) {
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Password or OTP required' });
+    }
+
+    // Issue JWT
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ success: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-  // Issue JWT
-  const jwt = require('jsonwebtoken');
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-  res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
 });
 // Candidate Interview History CRUD
 app.post('/api/candidates/:id/interviews', authenticateToken, authorizeRoles('Admin', 'HR Manager', 'Recruiter'), async (req, res) => {
@@ -178,6 +190,69 @@ app.get('/api/reports/executive', authenticateToken, authorizeRoles('Admin', 'HR
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Advanced Analytics Reports
+app.get('/api/reports/analytics', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  try {
+    // 1. Candidates added over time (e.g., last 6 months)
+    const [candidatesByMonth] = await db.execute(`
+      SELECT DATE_FORMAT(created_at, '%Y-%m') as month, COUNT(*) as count
+      FROM candidates
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      GROUP BY month
+      ORDER BY month;
+    `);
+
+    // 2. Interview results distribution
+    const [interviewOutcomes] = await db.execute(`
+      SELECT result, COUNT(*) as count
+      FROM candidate_interview_history
+      WHERE result IS NOT NULL AND result != ''
+      GROUP BY result;
+    `);
+
+    // 3. Competency ratings average
+    const [[competencyAverages]] = await db.execute(`
+      SELECT
+        AVG(communication) as communication,
+        AVG(cultural_fit) as cultural_fit,
+        AVG(passion) as passion,
+        AVG(leadership) as leadership,
+        AVG(learning_agility) as learning_agility
+      FROM competency_ratings;
+    `);
+
+    res.json({
+      candidatesByMonth,
+      interviewOutcomes,
+      competencyAverages: competencyAverages || {},
+    });
+
+  } catch (err) {
+    console.error('Error fetching analytics:', err);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
+
+app.get('/api/reports/recruitment-funnel', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  res.status(501).json({ message: 'Not Implemented' });
+});
+
+app.get('/api/reports/performance-metrics', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  res.status(501).json({ message: 'Not Implemented' });
+});
+
+app.get('/api/reports/time-to-hire', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  res.status(501).json({ message: 'Not Implemented' });
+});
+
+app.get('/api/reports/competency-analysis', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  res.status(501).json({ message: 'Not Implemented' });
+});
+
+app.get('/api/reports/custom', authenticateToken, authorizeRoles('Admin', 'HR Manager'), async (req, res) => {
+  res.status(501).json({ message: 'Not Implemented' });
 });
 import { Configuration, OpenAIApi } from 'openai';
 import nodemailer from 'nodemailer';
@@ -550,25 +625,6 @@ const cache = new NodeCache({ stdTTL: 60 }); // 60 seconds default TTL
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running!' });
-});
-
-// Auth: Login (bcrypt + JWT)
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-    if (rows.length === 0) return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    const user = rows[0];
-    // Compare password
-    if (!bcrypt.compareSync(password, user.password)) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-    // Issue JWT
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '8h' });
-    res.json({ success: true, user: { id: user.id, email: user.email, role: user.role, name: user.name }, token });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 

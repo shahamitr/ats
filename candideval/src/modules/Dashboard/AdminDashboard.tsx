@@ -1,6 +1,7 @@
 import React from 'react';
 import DownloadCandidateJourneyButton from '../../components/DownloadCandidateJourneyButton';
 import NotificationsPanel from '../../components/NotificationsPanel';
+import ReportsPanel from '../../components/ReportsPanel';
 import DashboardFilters, { DashboardFilterValues } from '../../components/DashboardFilters';
 import { useState } from 'react';
 
@@ -12,8 +13,11 @@ const AdminDashboard: React.FC = () => {
   // Example: Admin can manage users, candidates, export data, etc.
   return (
     <div className="p-8">
-      <NotificationsPanel userRole="Admin" />
       <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+      <NotificationsPanel userRole="Admin" />
+      <hr className="my-6" />
+      <ReportsPanel />
+      <hr className="my-6" />
       <ul className="mb-4">
         <li>Manage Users (Add, Enable/Disable, Import/Export)</li>
         <li>Manage Candidates (Add, Enable/Disable, Import/Export, Download Journey)</li>
