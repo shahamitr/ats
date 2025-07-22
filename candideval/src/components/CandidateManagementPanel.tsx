@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { debounce } from 'lodash';
-import SkeletonLoader from './SkeletonLoader';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface Candidate {
   id: number;
@@ -81,96 +95,126 @@ const CandidateManagementPanel: React.FC = () => {
     return sortOrder === 'ASC' ? ' ▲' : ' ▼';
   };
 
+  const renderSkeletons = () => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {[...Array(5)].map((_, i) => (
+            <TableHead key={i}><Skeleton className="h-5 w-full" /></TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {[...Array(limit)].map((_, i) => (
+          <TableRow key={i}>
+            {[...Array(5)].map((_, j) => (
+              <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+
   return (
-    <div className="p-4 bg-white rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Manage Candidates</h2>
-      <div className="flex justify-between items-center mb-4">
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          className="p-2 border rounded w-1/3"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-        />
-        <div>
-          <label htmlFor="limit-select" className="mr-2">Per Page:</label>
-          <select
-            id="limit-select"
-            value={limit}
+    <Card>
+      <CardHeader>
+        <CardTitle>Manage Candidates</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+          <Input
+            type="text"
+            placeholder="Search by name, email, or tags..."
+            className="w-full sm:w-1/3"
+            value={search}
             onChange={(e) => {
-              setLimit(Number(e.target.value));
+              setSearch(e.target.value);
               setPage(1);
             }}
-            className="p-2 border rounded"
-          >
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-          </select>
-        </div>
-      </div>
-
-      {loading && <SkeletonLoader rows={limit} cols={5} />}
-      {error && <p className="text-red-500">{error}</p>}
-      
-      {!loading && !error && (
-        <>
-          <div className="overflow-x-auto">
-            <table className="min-w-full w-full bg-white">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="py-2 px-4 text-left cursor-pointer" onClick={() => handleSort('name')}>Name{renderSortArrow('name')}</th>
-                  <th className="py-2 px-4 text-left cursor-pointer" onClick={() => handleSort('email')}>Email{renderSortArrow('email')}</th>
-                  <th className="py-2 px-4 text-left">Tags</th>
-                  <th className="py-2 px-4 text-left cursor-pointer" onClick={() => handleSort('created_at')}>Date Added{renderSortArrow('created_at')}</th>
-                  <th className="py-2 px-4 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.map(c => (
-                  <tr key={c.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-4">{c.name}</td>
-                    <td className="py-2 px-4">{c.email}</td>
-                    <td className="py-2 px-4">{c.tags}</td>
-                    <td className="py-2 px-4">{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td className="py-2 px-4">{c.enabled ? 'Active' : 'Disabled'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Per Page:</span>
+            <Select
+              value={String(limit)}
+              onValueChange={(value) => {
+                setLimit(Number(value));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[80px]">
+                <SelectValue placeholder="Limit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+        </div>
 
-          {pagination && pagination.total > 0 && (
-            <div className="flex justify-between items-center mt-4">
-              <span>
-                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} results
-              </span>
-              <div>
-                <button
-                  onClick={() => setPage(p => p - 1)}
-                  disabled={page === 1}
-                  className="p-2 border rounded mr-2 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <span>Page {page} of {pagination.totalPages}</span>
-                <button
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={page === pagination.totalPages}
-                  className="p-2 border rounded ml-2 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
+        {loading && renderSkeletons()}
+        {error && <p className="text-red-500">{error}</p>}
+        
+        {!loading && !error && (
+          <>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>Name{renderSortArrow('name')}</TableHead>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort('email')}>Email{renderSortArrow('email')}</TableHead>
+                    <TableHead>Tags</TableHead>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort('created_at')}>Date Added{renderSortArrow('created_at')}</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {candidates.map(c => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>{c.email}</TableCell>
+                      <TableCell>{c.tags}</TableCell>
+                      <TableCell>{new Date(c.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{c.enabled ? 'Active' : 'Disabled'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          )}
-        </>
-      )}
-    </div>
+
+            {pagination && pagination.total > 0 && (
+              <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} results
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => p - 1)}
+                    disabled={page === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm">Page {page} of {pagination.totalPages}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page === pagination.totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../modules/Auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const Login: React.FC = () => {
   const { login } = useAuth();
@@ -43,59 +47,55 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-      <form onSubmit={handleLogin} className="bg-white dark:bg-gray-800 p-8 rounded shadow w-96">
-        <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Login</h2>
-        {error && <div className="text-red-500 mb-4">{error}</div>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
-          required
-        />
-        {mode === 'password' ? (
-          <>
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
-              required
-            />
-            <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 mb-2">Login with Password</button>
-            <button
-              type="button"
-              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
-              onClick={handleSendOtp}
-              disabled={!email}
-            >
-              {otpSent ? 'Resend OTP' : 'Login with OTP'}
-            </button>
-          </>
-        ) : (
-          <>
-            <input
-              type="text"
-              placeholder="Enter OTP"
-              value={otp}
-              onChange={e => setOtp(e.target.value)}
-              className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-white"
-              required
-            />
-            <button type="submit" className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 mb-2">Login with OTP</button>
-            <button
-              type="button"
-              className="w-full bg-gray-400 text-white py-2 rounded hover:bg-gray-500"
-              onClick={() => setMode('password')}
-            >
-              Back to Password Login
-            </button>
-          </>
-        )}
-      </form>
+    <div className="flex items-center justify-center min-h-screen">
+      <Card className="w-full max-w-sm">
+        <form onSubmit={handleLogin}>
+          <CardHeader>
+            <CardTitle className="text-2xl">Login</CardTitle>
+            <CardDescription>Enter your credentials to access your account.</CardDescription>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="m@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            {mode === 'password' ? (
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="otp">OTP</Label>
+                <Input id="otp" type="text" value={otp} onChange={e => setOtp(e.target.value)} required />
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="flex flex-col gap-2">
+            {mode === 'password' ? (
+              <>
+                <Button type="submit" className="w-full">Login with Password</Button>
+                <Button type="button" variant="outline" className="w-full" onClick={handleSendOtp} disabled={!email}>
+                  {otpSent ? 'Resend OTP' : 'Login with OTP'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button type="submit" className="w-full">Login with OTP</Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full"
+                  onClick={() => setMode('password')}
+                >
+                  Back to Password Login
+                </Button>
+              </>
+            )}
+          </CardFooter>
+        </form>
+      </Card>
     </div>
   );
 };

@@ -1,4 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -24,10 +26,11 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="text-center p-8">
-          <h1 className="text-2xl font-bold text-red-600">Something went wrong.</h1>
-          <p>We're sorry for the inconvenience. Please try refreshing the page.</p>
-        </div>
+        <Alert variant="destructive" className="max-w-lg mx-auto mt-10">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Something went wrong.</AlertTitle>
+          <AlertDescription>We're sorry for the inconvenience. Please try refreshing the page.</AlertDescription>
+        </Alert>
       );
     }
 

@@ -11,6 +11,7 @@ import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import AdminEmailTemplates from './pages/AdminEmailTemplates';
+import { ThemeProvider } from './components/theme-provider';
 
 const AppRoutes: React.FC = () => {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ const AppRoutes: React.FC = () => {
   return (
     <>
       {user && <MenuBar />}
-      <div className="p-4 sm:p-6 lg:p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <ErrorBoundary>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -34,18 +35,20 @@ const AppRoutes: React.FC = () => {
             <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
           </Routes>
         </ErrorBoundary>
-      </div>
+      </main>
     </>
   );
 };
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <AuthProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 };
 
