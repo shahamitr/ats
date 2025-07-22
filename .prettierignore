@@ -1,0 +1,17 @@
+# Ignore artifacts
+build
+coverage
+dist
+
+# Ignore dependencies
+node_modules
+
+# Ignore environment files
+.env
+.env.*
+!.env.example
+
+# Ignore package lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

@@ -1,18 +1,63 @@
 // CandidateProfileManager.tsx
 // Candidate Profile Manager: Manual entry, CSV import, resume link, tags, timeline view
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import RecentActivity from '../../components/RecentActivity';
-import { CandidateProfile } from '../../types/candidate';
-import axios from 'axios';
+import { toast } from 'sonner';
+import api from '../../api/axiosConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
+import { Toaster } from '@/components/ui/sonner';
 
-const initialProfile: CandidateProfile = {
+const candidateProfileSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Name is required.'),
+  email: z.string().min(1, 'Email is required.').email('Invalid email format.'),
+  phone: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^\+?[1-9]\d{1,14}$/.test(val), {
+      message: 'Invalid phone number format.',
+    }),
+  resumeUrl: z.string().url('Invalid URL format.').optional().or(z.literal('')),
+  tags: z.array(z.string()),
+  timeline: z.array(z.any()),
+  auditLogs: z.array(z.any()),
+  interviewDate: z.date().optional(),
+  auditContent: z.string().optional(),
+});
+
+type CandidateProfileFormValues = z.infer<typeof candidateProfileSchema>;
+
+const initialProfile: CandidateProfileFormValues = {
   id: '',
   name: '',
   email: '',
@@ -20,60 +65,34 @@ const initialProfile: CandidateProfile = {
   resumeUrl: '',
   tags: [],
   timeline: [],
-  auditLogs: [], // new field for audit logs
+  auditLogs: [],
+  interviewDate: undefined,
+  auditContent: '',
 };
 
 const existingTags = ['Java', 'React', 'Python', 'Manager', 'Remote', 'Intern'];
 
-type ValidationErrors = Partial<Record<keyof Omit<CandidateProfile, 'tags' | 'timeline' | 'auditLogs'>, string>>;
-
 const CandidateProfileManager: React.FC = () => {
-  const [profile, setProfile] = useState<CandidateProfile>(initialProfile);
   const [csvData, setCsvData] = useState<string>('');
-  const [interviewDate, setInterviewDate] = useState<Date | undefined>(undefined);
-  const [auditContent, setAuditContent] = useState('');
-  const [errors, setErrors] = useState<ValidationErrors>({});
   const [newTag, setNewTag] = useState('');
 
-  const validateField = (name: string, value: string): string => {
-    switch (name) {
-      case 'name':
-        return value.trim() ? '' : 'Name is required.';
-      case 'email':
-        if (!value) return 'Email is required.';
-        return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) ? '' : 'Invalid email format.';
-      case 'phone':
-        // Optional field, but if filled, validate it
-        return !value || /^\+?[1-9]\d{1,14}$/.test(value) ? '' : 'Invalid phone number format.';
-      case 'resumeUrl':
-        try {
-          if (value) new URL(value);
-          return '';
-        } catch (_) {
-          return 'Invalid URL format.';
-        }
-      default:
-        return '';
-    }
-  };
+  const { register, handleSubmit, control, setValue, getValues, watch, formState: { errors } } = useForm<CandidateProfileFormValues>({
+    resolver: zodResolver(candidateProfileSchema),
+    defaultValues: initialProfile,
+  });
 
-  // Handlers for form fields
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setProfile({ ...profile, [name]: value });
-    const error = validateField(name, value);
-    setErrors(prev => ({ ...prev, [name]: error }));
-  };
+  const currentTags = watch('tags');
+  const auditLogs = watch('auditLogs');
 
   const handleTagAdd = (tag: string) => {
     const trimmedTag = tag.trim();
-    if (trimmedTag && !profile.tags.includes(trimmedTag)) {
-      setProfile(prev => ({ ...prev, tags: [...prev.tags, trimmedTag] }));
+    if (trimmedTag && !currentTags.includes(trimmedTag)) {
+      setValue('tags', [...currentTags, trimmedTag]);
       setNewTag('');
     }
   };
   const handleTagRemove = (tag: string) => {
-    setProfile({ ...profile, tags: profile.tags.filter(t => t !== tag) });
+    setValue('tags', currentTags.filter((t) => t !== tag));
   };
 
   // CSV import handler (basic, for demo)
@@ -91,68 +110,62 @@ const CandidateProfileManager: React.FC = () => {
 
   // Audit log handler
   const addAuditLog = (action: string, user: string) => {
-    setProfile(prev => ({
-      ...prev,
-      auditLogs: [
-        ...(prev.auditLogs || []),
-        { action, user, timestamp: new Date().toISOString() },
-      ],
-    }));
+    const currentLogs = getValues('auditLogs') || [];
+    setValue('auditLogs', [
+      ...currentLogs,
+      { action, user, timestamp: new Date().toISOString() },
+    ]);
   };
 
-  const validateForm = useCallback((): boolean => {
-    const newErrors: ValidationErrors = {};
-    (Object.keys(profile) as Array<keyof typeof profile>).forEach(key => {
-      if (typeof profile[key] === 'string') {
-        const error = validateField(key, profile[key] as string);
-        if (error) newErrors[key as keyof ValidationErrors] = error;
-      }
-    });
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [profile]);
-
   // Backend connection (demo: save profile)
-  const saveProfile = async () => {
-    if (!validateForm()) return;
+  const onSubmit = async (data: CandidateProfileFormValues) => {
     try {
-      const payload = { ...profile, tags: profile.tags.join(',') };
-      await axios.post('/api/candidates', payload);
+      // The backend expects tags as a comma-separated string
+      const payload = { ...data, tags: data.tags.join(',') };
+      await api.post('/candidates', payload);
       addAuditLog('Profile saved', 'admin');
-      alert('Profile saved successfully!');
+      toast.success('Profile Saved', {
+        description: 'The candidate profile has been updated successfully.',
+      });
     } catch (err) {
-      alert('Error saving profile');
+      console.error('Error saving profile:', err);
+      toast.error('Error Saving Profile', {
+        description:
+          'There was a problem saving the profile. Please try again.',
+      });
     }
   };
 
   return (
-    <Card className="max-w-4xl mx-auto">
+    <TooltipProvider>
+      <Toaster position="top-right" richColors />
+      <Card className="max-w-4xl mx-auto">
       <CardHeader>
         <CardTitle>Candidate Profile Manager</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={e => { e.preventDefault(); saveProfile(); }} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" type="text" placeholder="Full candidate name" value={profile.name} onChange={handleChange} />
-              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+              <Input id="name" type="text" placeholder="Full candidate name" {...register('name')} />
+              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="Valid email address" value={profile.email} onChange={handleChange} />
-              {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+              <Input id="email" type="email" placeholder="Valid email address" {...register('email')} />
+              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone (Optional)</Label>
-              <Input id="phone" name="phone" type="tel" placeholder="+1234567890" value={profile.phone} onChange={handleChange} />
-              {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+              <Input id="phone" type="tel" placeholder="+1234567890" {...register('phone')} />
+              {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="resumeUrl">Resume Link (Optional)</Label>
-              <Input id="resumeUrl" name="resumeUrl" type="url" placeholder="https://linkedin.com/in/..." value={profile.resumeUrl} onChange={handleChange} />
-              {errors.resumeUrl && <p className="text-sm text-destructive">{errors.resumeUrl}</p>}
+              <Input id="resumeUrl" type="url" placeholder="https://linkedin.com/in/..." {...register('resumeUrl')} />
+              {errors.resumeUrl && <p className="text-sm text-destructive">{errors.resumeUrl.message}</p>}
             </div>
           </div>
 
@@ -160,7 +173,11 @@ const CandidateProfileManager: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="interviewDate">Interview Date</Label>
-              <DatePicker date={interviewDate} setDate={setInterviewDate} />
+              <Controller
+                name="interviewDate"
+                control={control}
+                render={({ field }) => <DatePicker date={field.value} setDate={field.onChange} />}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="csv-import">Import from CSV</Label>
@@ -174,7 +191,7 @@ const CandidateProfileManager: React.FC = () => {
               <Label>Select existing tags</Label>
               <div className="flex flex-wrap gap-2">
                 {existingTags.map(tag => (
-                  <Button key={tag} type="button" variant={profile.tags.includes(tag) ? "default" : "outline"} size="sm" onClick={() => handleTagAdd(tag)}>
+                  <Button key={tag} type="button" variant={currentTags.includes(tag) ? "default" : "outline"} size="sm" onClick={() => handleTagAdd(tag)}>
                     {tag}
                   </Button>
                 ))}
@@ -183,21 +200,53 @@ const CandidateProfileManager: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="new-tag">Add new tag</Label>
               <div className="flex gap-2">
-                <Input id="new-tag" value={newTag} onChange={e => setNewTag(e.target.value)} placeholder="Type tag and press Enter" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleTagAdd(newTag); } }} />
-                <Button type="button" onClick={() => handleTagAdd(newTag)}>Add</Button>
+                <Input id="new-tag" value={newTag} onChange={e => setNewTag(e.target.value)} placeholder="e.g., Senior, Frontend" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleTagAdd(newTag); } }} />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" onClick={() => handleTagAdd(newTag)}>Add</Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Add this new tag to the candidate.</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
-            {profile.tags.length > 0 && (
+            {currentTags.length > 0 && (
               <div className="space-y-2">
                 <Label>Current Tags</Label>
                 <div className="flex flex-wrap gap-2">
-                  {profile.tags.map(tag => (
+                  {currentTags.map(tag => (
                     <span key={tag} className="inline-flex items-center py-1 pl-3 pr-2 rounded-full text-sm font-medium bg-amber-400 text-amber-900">
                       {tag}
-                      <button type="button" onClick={() => handleTagRemove(tag)} className="ml-1 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-amber-700 hover:bg-amber-300 hover:text-amber-800 focus:outline-none focus:bg-amber-500 focus:text-white">
-                        <span className="sr-only">Remove {tag}</span>
-                        <svg className="h-2 w-2" stroke="currentColor" fill="none" viewBox="0 0 8 8"><path strokeLinecap="round" strokeWidth="1.5" d="M1 1l6 6m0-6L1 7" /></svg>
-                      </button>
+                      <AlertDialog>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertDialogTrigger asChild>
+                              <button type="button" className="ml-1 flex-shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-amber-700 hover:bg-amber-300 hover:text-amber-800 focus:outline-none focus:bg-amber-500 focus:text-white">
+                                <span className="sr-only">Remove {tag}</span>
+                                <svg className="h-2 w-2" stroke="currentColor" fill="none" viewBox="0 0 8 8"><path strokeLinecap="round" strokeWidth="1.5" d="M1 1l6 6m0-6L1 7" /></svg>
+                              </button>
+                            </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Remove tag</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove the "{tag}" tag from the candidate.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleTagRemove(tag)}>
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </span>
                   ))}
                 </div>
@@ -206,7 +255,14 @@ const CandidateProfileManager: React.FC = () => {
           </div>
 
           <div className="pt-5 flex justify-end">
-            <Button type="submit">Save Profile</Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button type="submit">Save Profile</Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Save all changes to the candidate's profile.</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </form>
 
@@ -215,7 +271,7 @@ const CandidateProfileManager: React.FC = () => {
           <div>
             <h3 className="text-lg font-medium">Timeline</h3>
             <ul className="mt-4 space-y-2">
-              {profile.timeline.length > 0 ? profile.timeline.map((item, idx) => (
+              {initialProfile.timeline.length > 0 ? initialProfile.timeline.map((item, idx) => (
                 <li key={idx} className="p-2 bg-muted rounded-md text-sm">{item.stage} - {item.date} - {item.status}</li>
               )) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}
             </ul>
@@ -225,18 +281,66 @@ const CandidateProfileManager: React.FC = () => {
           <div>
             <h3 className="text-lg font-medium">Audit Log (Rich Content)</h3>
             <div className="mt-4 space-y-2">
-              <ReactQuill theme="snow" value={auditContent} onChange={setAuditContent} placeholder="Enter audit notes..." />
-              <Button type="button" variant="outline" onClick={() => setAuditContent('')}>
-                Clear Audit Content
-              </Button>
+              <Controller
+                name="auditContent"
+                control={control}
+                render={({ field }) => <ReactQuill theme="snow" value={field.value} onChange={field.onChange} placeholder="Enter audit notes..." />}
+              />
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="outline">Clear Audit Content</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently clear the content of the audit log. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => setValue('auditContent', '')}>
+                      Confirm
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
 
           {/* Recent Activity */}
-          <RecentActivity activities={(profile.auditLogs || []).map(log => ({ timestamp: log.timestamp, user: log.user, action: log.action }))} />
+          <div>
+            <h3 className="text-lg font-medium">Recent Activity</h3>
+            <div className="mt-4 space-y-2">
+              {(auditLogs || []).map((log, index) => (
+                <Drawer key={index}>
+                  <DrawerTrigger asChild>
+                    <div className="p-3 bg-muted rounded-md cursor-pointer hover:bg-muted/80 transition-colors">
+                      <p className="text-sm font-medium">{log.action}</p>
+                      <p className="text-xs text-muted-foreground">
+                        By {log.user} on {new Date(log.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </DrawerTrigger>
+                  <DrawerContent className="p-4">
+                    <h4 className="text-lg font-semibold">Activity Details</h4>
+                    <div className="mt-4 grid gap-2 text-sm">
+                      <p><strong>Action:</strong> {log.action}</p>
+                      <p><strong>User:</strong> {log.user}</p>
+                      <p><strong>Timestamp:</strong> {new Date(log.timestamp).toISOString()}</p>
+                    </div>
+                  </DrawerContent>
+                </Drawer>
+              ))}
+              {(auditLogs || []).length === 0 && (
+                <p className="text-sm text-muted-foreground">No recent activity.</p>
+              )}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 };
 
