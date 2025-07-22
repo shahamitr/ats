@@ -115,6 +115,25 @@ app.post('/api/candidates/:id/interviews', authenticateToken, authorizeRoles('Ad
       'INSERT INTO candidate_interview_history (candidate_id, interview_date, interview_type, panel_members, feedback, result) VALUES (?, ?, ?, ?, ?, ?)',
       [candidateId, interview_date, interview_type, panel_members, feedback, result]
     );
+
+    // Send email notification to candidate on final result
+    if (result === 'Selected' || result === 'Rejected') {
+      try {
+        const [[candidate]] = await db.execute('SELECT name, email FROM candidates WHERE id = ?', [candidateId]);
+        if (candidate && candidate.email) {
+          await transporter.sendMail({
+            from: process.env.SMTP_USER,
+            to: candidate.email,
+            subject: `Update on your application with Candideval`,
+            text: `Dear ${candidate.name},\n\nThis is an update regarding your recent interview process. The outcome is: ${result}.\n\nWe appreciate you taking the time to interview with us.\n\nBest regards,\nThe Hiring Team`,
+          });
+        }
+      } catch (emailError) {
+        // Log the email error but don't fail the main request
+        console.error(`Failed to send outcome email to candidate ${candidateId}:`, emailError);
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
