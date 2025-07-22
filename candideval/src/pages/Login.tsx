@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../modules/Auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Login: React.FC = () => {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -23,6 +25,7 @@ const Login: React.FC = () => {
       }
       login(res.data.user);
       localStorage.setItem('token', res.data.token);
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed');
     }

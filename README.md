@@ -19,13 +19,34 @@
 - **Admin Tools**: Enable/disable users/candidates, import/export, reporting
 - **UI/UX**: Modern React UI, Tailwind CSS, Snackbar notifications, filters (date, stage, location, tag)
 
+## 1. Running with Docker (Recommended)
+
+This is the easiest way to get the entire application stack running.
+
+### Prerequisites
+- Docker
+- Docker Compose
+
+### Steps
+1.  **Generate Demo Data**: The Docker setup uses a large set of demo candidates. Run this command once to generate the required SQL file:
+    ```bash
+    node backend/generate_demo_data.js
+    ```
+2.  **Start the Application**: From the root directory of the project, run:
+    ```bash
+    docker-compose up --build
+    ```
+3.  **Access the App**: Open your browser and go to `http://localhost:3000`.
+
+The backend API will be available at `http://localhost:5000`, and the MySQL database at `localhost:3306`.
 
 ## Prerequisites
 - Node.js (v18+ recommended)
 - npm
 - MySQL server
 
-## 1. Database Setup
+## 2. Manual Local Development Setup
+### Database Setup
 1. Start your MySQL server.
 2. Import the schema and demo data:
    ```bash
@@ -34,7 +55,7 @@
    ```
    (Change username/password as needed)
 
-## 2. Backend Setup
+### Backend Setup
 1. Open a terminal in the `backend` directory:
    ```bash
    cd backend
@@ -43,7 +64,7 @@
    ```
 2. The backend runs on port 5000 by default.
 
-## 3. Frontend Setup
+### Frontend Setup
 1. Open a separate terminal in the `candideval` directory:
    ```bash
    cd candideval
@@ -52,7 +73,7 @@
    ```
 2. The frontend runs on port 3000 by default.
 
-## 4. Connecting Frontend and Backend
+### Connecting Frontend and Backend
 - The frontend uses axios to call backend APIs (e.g., `/api/auth/login`).
 - For local development, you may need to set up a proxy in `candideval/package.json`:
   ```json

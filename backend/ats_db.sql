@@ -110,3 +110,14 @@ CREATE TABLE IF NOT EXISTS report_audit_log (
   generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (generated_by) REFERENCES users(id)
 );
+
+-- In-app notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  message VARCHAR(255) NOT NULL,
+  link VARCHAR(255), -- Optional link to the relevant page, e.g., /candidates/123
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

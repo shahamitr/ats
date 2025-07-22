@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ats_db_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword # Use a more secure password in production
+      MYSQL_DATABASE: ats_db
+    ports:
+      # Expose MySQL port to the host for debugging/management
+      - "3306:3306"
+    volumes:
+      # Persist database data
+      - db_data:/var/lib/mysql
+      # Run initialization scripts on first start.
+      # The files are run in alphabetical order by the entrypoint.
+      - ./backend/ats_db.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./backend/demo_users.sql:/docker-entrypoint-initdb.d/2-users.sql
+      - ./backend/demo_candidates.sql:/docker-entrypoint-initdb.d/3-candidates.sql
+      - ./backend/migrations/001_add_indexes.sql:/docker-entrypoint-initdb.d/4-indexes.sql
+    networks:
+      - ats-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ats_redis
+    restart: unless-stopped
+    ports:
+      # Optional: Expose Redis port for debugging
+      - "6379:6379"
+    networks:
+      - ats-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ats_backend
+    restart: unless-stopped
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "5000:5000"
+    environment:
+      # The backend will connect to the 'db' service on the internal network
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: rootpassword # Should match MYSQL_ROOT_PASSWORD
+      DB_NAME: ats_db
+      JWT_SECRET: your-super-secret-key-for-jwt # Change this!
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    networks:
+      - ats-network
+
+  frontend:
+    build:
+      context: ./candideval
+      dockerfile: Dockerfile
+    container_name: ats_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80" # Map host port 3000 to container's Nginx port 80
+    networks:
+      - ats-network
+
+networks:
+  ats-network:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local

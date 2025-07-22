@@ -1,0 +1,115 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      String // Consider an Enum: enum Role { Admin, HR_Manager, ... }
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  notifications       Notification[]
+  ratedCompetencies   CompetencyRating[] @relation("RatedByUser")
+  feedbackGiven       Feedback[]         @relation("GivenByUser")
+  recommendationsMade Recommendation[]   @relation("RecommendedByUser")
+
+  @@map("users")
+}
+
+model Candidate {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  phone      String?
+  resume_url String?
+  cv_file    String?
+  tags       String?
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  interviews      CandidateInterviewHistory[]
+  ratings         CompetencyRating[]
+  feedback        Feedback[]
+  recommendations Recommendation[]
+
+  @@map("candidates")
+}
+
+model CandidateInterviewHistory {
+  id             Int      @id @default(autoincrement())
+  candidate      Candidate @relation(fields: [candidate_id], references: [id])
+  candidate_id   Int
+  interview_date DateTime @db.Date
+  interview_type String
+  panel_members  String?
+  feedback       String?  @db.Text
+  result         String?
+
+  @@map("candidate_interview_history")
+}
+
+model CompetencyRating {
+  id               Int      @id @default(autoincrement())
+  candidate        Candidate @relation(fields: [candidate_id], references: [id])
+  candidate_id     Int
+  communication    Int
+  cultural_fit     Int
+  passion          Int
+  leadership       Int
+  learning_agility Int
+  rated_by_user    User     @relation("RatedByUser", fields: [rated_by], references: [id])
+  rated_by         Int
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("competency_ratings")
+}
+
+model Feedback {
+  id              Int      @id @default(autoincrement())
+  candidate       Candidate @relation(fields: [candidate_id], references: [id])
+  candidate_id    Int
+  stage           String
+  feedback_text   String?  @db.Text
+  panel_member    User     @relation("GivenByUser", fields: [panel_member_id], references: [id])
+  panel_member_id Int      @map("panel_member")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("feedback")
+}
+
+model Recommendation {
+  id                  Int      @id @default(autoincrement())
+  candidate           Candidate @relation(fields: [candidate_id], references: [id])
+  candidate_id        Int
+  recommendation_text String?  @db.Text
+  status              String
+  recommended_by_user User     @relation("RecommendedByUser", fields: [recommended_by], references: [id])
+  recommended_by      Int
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@map("recommendations")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [user_id], references: [id])
+  user_id   Int
+  message   String
+  link      String?
+  is_read   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
